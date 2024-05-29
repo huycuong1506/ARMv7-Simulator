@@ -7,6 +7,13 @@
 
 
 from PyQt6 import QtCore, QtGui, QtWidgets
+import re
+import sys
+import Assembly
+from dict import line_edit_dict, conditon_dict
+import Create_memory
+from encoder import Encoder
+from decoder import Decoder
 
 
 class Ui_MainWindow(object):
@@ -31,17 +38,36 @@ class Ui_MainWindow(object):
         self.RestarButton = QtWidgets.QPushButton(parent=self.tab_1)
         self.RestarButton.setGeometry(QtCore.QRect(100, 10, 101, 21))
         self.RestarButton.setObjectName("RestarButton")
+        self.StepButton = QtWidgets.QPushButton(parent=self.tab_1)
+        self.StepButton.setGeometry(QtCore.QRect(220, 10, 101, 21))
+        self.StepButton.setObjectName("StepButton")
+        self.ImportButton = QtWidgets.QPushButton(parent=self.tab_1)
+        self.ImportButton.setGeometry(QtCore.QRect(480, 10, 101, 21))
+        self.ImportButton.setObjectName("ImportButton")
+        self.ExportButton = QtWidgets.QPushButton(parent=self.tab_1)
+        self.ExportButton.setGeometry(QtCore.QRect(600, 10, 101, 21))
+        self.ExportButton.setObjectName("ExportButton")
+        self.BreakPoint = QtWidgets.QPushButton(parent=self.tab_1)
+        self.BreakPoint.setGeometry(QtCore.QRect(340, 10, 121, 21))
+        self.BreakPoint.setObjectName("BreakPoint")
+
         self.CodeEditText = QtWidgets.QTextEdit(parent=self.tab_1)
         self.CodeEditText.setGeometry(QtCore.QRect(380, 50, 411, 371))
         self.CodeEditText.setObjectName("CodeEditText")
+
+        self.SimulateButton.clicked.connect(self.Check)
+        self.RestarButton.clicked.connect(self.Restart)
+        self.StepButton.clicked.connect(self.check_next_line)
+       
+
         self.formLayoutWidget = QtWidgets.QWidget(parent=self.tab_1)
         self.formLayoutWidget.setGeometry(QtCore.QRect(0, 40, 371, 491))
         self.formLayoutWidget.setObjectName("formLayoutWidget")
         self.Layout_registers = QtWidgets.QFormLayout(self.formLayoutWidget)
         self.Layout_registers.setContentsMargins(10, 10, 10, 0)
         self.Layout_registers.setObjectName("Layout_registers")
-
-
+        
+       
         
         self.r0_Label = QtWidgets.QLabel(parent=self.formLayoutWidget)
         self.r0_Label.setObjectName("r0_Label")
@@ -74,6 +100,10 @@ class Ui_MainWindow(object):
         self.r4_Label = QtWidgets.QLabel(parent=self.formLayoutWidget)
         self.r4_Label.setObjectName("r4_Label")
         self.Layout_registers.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.r4_Label)
+        self.r4_LineEdit = QtWidgets.QLineEdit(parent=self.formLayoutWidget)
+        self.r4_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.r4_LineEdit.setObjectName("r4_LineEdit")
+        self.Layout_registers.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.r4_LineEdit)
         self.r5_Label = QtWidgets.QLabel(parent=self.formLayoutWidget)
         self.r5_Label.setObjectName("r5_Label")
         self.Layout_registers.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.r5_Label)
@@ -151,16 +181,31 @@ class Ui_MainWindow(object):
         self.pc_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.pc_LineEdit.setObjectName("pc_LineEdit")
         self.Layout_registers.setWidget(15, QtWidgets.QFormLayout.ItemRole.FieldRole, self.pc_LineEdit)
-        self.r4_LineEdit = QtWidgets.QLineEdit(parent=self.formLayoutWidget)
-        self.r4_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.r4_LineEdit.setObjectName("r4_LineEdit")
-        self.Layout_registers.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.r4_LineEdit)
+        
+        line_edit_dict["r0"] = self.r0_LineEdit
+        line_edit_dict["r1"] = self.r1_LineEdit
+        line_edit_dict["r2"] = self.r2_LineEdit
+        line_edit_dict["r3"] = self.r3_LineEdit
+        line_edit_dict["r4"] = self.r4_LineEdit
+        line_edit_dict["r5"] = self.r5_LineEdit
+        line_edit_dict["r6"] = self.r6_LineEdit
+        line_edit_dict["r7"] = self.r7_LineEdit
+        line_edit_dict["r8"] = self.r8_LineEdit
+        line_edit_dict["r9"] = self.r9_LineEdit
+        line_edit_dict["r10"] = self.r10_LineEdit
+        line_edit_dict["r11"] = self.r11_LineEdit
+        line_edit_dict["r12"] = self.r12_LineEdit
+        line_edit_dict["lr"] = self.lr_LineEdit
+        line_edit_dict["sp"] = self.sp_LineEdit
+        line_edit_dict["pc"] = self.pc_LineEdit
+
         self.formLayoutWidget_2 = QtWidgets.QWidget(parent=self.tab_1)
         self.formLayoutWidget_2.setGeometry(QtCore.QRect(380, 420, 160, 134))
         self.formLayoutWidget_2.setObjectName("formLayoutWidget_2")
         self.Layout_condition = QtWidgets.QFormLayout(self.formLayoutWidget_2)
         self.Layout_condition.setContentsMargins(10, 10, 10, 10)
         self.Layout_condition.setObjectName("Layout_condition")
+        #n
         self.n_Label = QtWidgets.QLabel(parent=self.formLayoutWidget_2)
         self.n_Label.setObjectName("n_Label")
         self.Layout_condition.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.n_Label)
@@ -168,6 +213,7 @@ class Ui_MainWindow(object):
         self.n_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.n_LineEdit.setObjectName("n_LineEdit")
         self.Layout_condition.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.n_LineEdit)
+        #z
         self.z_Label = QtWidgets.QLabel(parent=self.formLayoutWidget_2)
         self.z_Label.setObjectName("z_Label")
         self.Layout_condition.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.z_Label)
@@ -175,9 +221,15 @@ class Ui_MainWindow(object):
         self.z_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.z_LineEdit.setObjectName("z_LineEdit")
         self.Layout_condition.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.z_LineEdit)
+        #c
         self.c_Label = QtWidgets.QLabel(parent=self.formLayoutWidget_2)
         self.c_Label.setObjectName("c_Label")
         self.Layout_condition.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.c_Label)
+        self.c_LineEdit = QtWidgets.QLineEdit(parent=self.formLayoutWidget_2)
+        self.c_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.c_LineEdit.setObjectName("c_LineEdit")
+        self.Layout_condition.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.c_LineEdit)
+        #v
         self.v_Label = QtWidgets.QLabel(parent=self.formLayoutWidget_2)
         self.v_Label.setObjectName("v_Label")
         self.Layout_condition.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.v_Label)
@@ -185,22 +237,9 @@ class Ui_MainWindow(object):
         self.v_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.v_LineEdit.setObjectName("v_LineEdit")
         self.Layout_condition.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.v_LineEdit)
-        self.c_LineEdit = QtWidgets.QLineEdit(parent=self.formLayoutWidget_2)
-        self.c_LineEdit.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.c_LineEdit.setObjectName("c_LineEdit")
-        self.Layout_condition.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.c_LineEdit)
-        self.RestarButton_2 = QtWidgets.QPushButton(parent=self.tab_1)
-        self.RestarButton_2.setGeometry(QtCore.QRect(220, 10, 101, 21))
-        self.RestarButton_2.setObjectName("RestarButton_2")
-        self.RestarButton_3 = QtWidgets.QPushButton(parent=self.tab_1)
-        self.RestarButton_3.setGeometry(QtCore.QRect(480, 10, 101, 21))
-        self.RestarButton_3.setObjectName("RestarButton_3")
-        self.RestarButton_4 = QtWidgets.QPushButton(parent=self.tab_1)
-        self.RestarButton_4.setGeometry(QtCore.QRect(600, 10, 101, 21))
-        self.RestarButton_4.setObjectName("RestarButton_4")
-        self.RestarButton_5 = QtWidgets.QPushButton(parent=self.tab_1)
-        self.RestarButton_5.setGeometry(QtCore.QRect(340, 10, 121, 21))
-        self.RestarButton_5.setObjectName("RestarButton_5")
+        
+        
+       
         self.tabWidget.addTab(self.tab_1, "")
         self.tab_2 = QtWidgets.QWidget()
         self.tab_2.setObjectName("tab_2")
@@ -295,6 +334,7 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         self.tabWidget.setCurrentIndex(1)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        
         for i in range(100):
             line_edit = QtWidgets.QLineEdit(parent=self.scrollAreaWidgetContents_4)
             line_edit.setObjectName(f"lineEdit_{i}")
@@ -398,10 +438,10 @@ class Ui_MainWindow(object):
         self.v_Label.setText(_translate("MainWindow", "V"))
         self.v_LineEdit.setText(_translate("MainWindow", "0"))
         self.c_LineEdit.setText(_translate("MainWindow", "0"))
-        self.RestarButton_2.setText(_translate("MainWindow", "STEP"))
-        self.RestarButton_3.setText(_translate("MainWindow", "IMPORT"))
-        self.RestarButton_4.setText(_translate("MainWindow", "EXPORT"))
-        self.RestarButton_5.setText(_translate("MainWindow", "BREAKPOINT"))
+        self.StepButton.setText(_translate("MainWindow", "STEP"))
+        self.ImportButton.setText(_translate("MainWindow", "IMPORT"))
+        self.ExportButton.setText(_translate("MainWindow", "EXPORT"))
+        self.BreakPoint.setText(_translate("MainWindow", "BREAKPOINT"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_1), _translate("MainWindow", "Editor"))
         self.label_3.setText(_translate("MainWindow", "Go to address"))
         self.pushButton.setText(_translate("MainWindow", "Go"))
@@ -411,6 +451,152 @@ class Ui_MainWindow(object):
         self.pushButton_3.setText(_translate("MainWindow", "HEXA"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Memory"))
         self.label.setText(_translate("MainWindow", "ARMv7-M instruction set simulator"))
+
+
+    pc = 0
+    instruction_size = 4
+    address = []
+    
+    def Check(self):
+        self.message_box = QtWidgets.QMessageBox(self.tab_1)
+        global pc
+        memory = []
+        text = self.CodeEditText.toPlainText()
+        lines = text.split("\n")
+        for index, line in enumerate(lines, start=1):
+            pc_binary = '0x' + format(self.pc, '08x')
+            self.pc_LineEdit.setText(pc_binary)
+            self.address.append(pc_binary)
+            self.pc += self.instruction_size
+            
+            memory_line = Create_memory.check_memory(self, line)
+            if memory_line:
+                memory.append(memory_line)
+                
+            if not len(memory) > int(self.sizeMemory_LineEdit.text()):
+                text_content = "\t".join(str(item) for item in memory)
+                self.MemoryTextEdit.setPlainText(text_content)
+            else:
+                print("Out of Memory")
+                break
+        
+        for index, line in enumerate(lines, start=1):
+            if line.strip():
+                reg, arguments, flag_N, flag_Z, flag_C, flag_V, flag_T = Assembly.check_assembly_line(self, line, self.address, memory)
+            elif not line.strip():
+                print("không có câu lệnh nào")
+                break
+
+            if arguments and len(reg) == 1 and len(arguments) == 1:
+                line_edit = line_edit_dict.get(reg[0])
+                line_edit.setText(arguments[0])
+            elif arguments and len(reg) == 2 and len(arguments) == 2:
+                line_edit_1 = line_edit_dict.get(reg[0])
+                line_edit_1.setText(arguments[0])
+                line_edit_2 = line_edit_dict.get(reg[1])
+                line_edit_2.setText(arguments[1])
+            elif arguments is None and flag_T:
+                pass
+            elif arguments is None:
+                print("Lệnh ở dòng " + str(index) + " không hợp lệ")
+                break
+                
+            n_edit = conditon_dict.get("n")
+            z_edit = conditon_dict.get("z")
+            c_edit = conditon_dict.get("c")
+            v_edit = conditon_dict.get("v")
+
+            n_edit.setText(flag_N)
+            z_edit.setText(flag_Z)
+            c_edit.setText(flag_C)
+            v_edit.setText(flag_V)
+                       
+    current_line_index = 0
+    memory_current_line = []
+    def check_next_line(self):
+        global current_line_index
+        text = self.CodeEditText.toPlainText()    
+        lines = text.split("\n")
+        if self.current_line_index == 0:
+            address_index = 0
+            for index, line in enumerate(lines, start=1):
+                pc_binary = '0x' + format(address_index, '08x')
+                self.address.append(pc_binary)
+                address_index += self.instruction_size
+                
+                memory_line = Create_memory.check_memory(self, line)
+                if memory_line:
+                    self.memory_current_line.append(memory_line)
+                    
+                if not len(self.memory_current_line) > int(self.sizeMemory_LineEdit.text()):
+                    text_content = "\t".join(str(item) for item in self.memory_current_line)
+                    self.MemoryTextEdit.setPlainText(text_content)
+                else:
+                    print("Out of Memory")
+                    break
+        if self.current_line_index < len(lines):
+            current_line = lines[self.current_line_index]
+            if current_line.strip():
+                reg, arguments, flag_N, flag_Z, flag_C, flag_V, flag_T = Assembly.check_assembly_line(self, current_line, self.address, self.memory_current_line)
+            elif not line.strip():
+                print("không còn câu lệnh nào")
+                pass
+                
+            if arguments and len(reg) == 1 and len(arguments) == 1:
+                line_edit = line_edit_dict.get(reg[0])
+                line_edit.setText(arguments[0])
+            elif arguments and len(reg) == 2 and len(arguments) == 2:
+                line_edit_1 = line_edit_dict.get(reg[0])
+                line_edit_1.setText(arguments[0])
+                line_edit_2 = line_edit_dict.get(reg[1])
+                line_edit_2.setText(arguments[1])
+            elif arguments is None and flag_T:
+                pass
+            elif arguments is None:
+                print("Lệnh ở dòng " + str(self.current_line_index) + " không hợp lệ")
+                    
+            n_edit = conditon_dict.get("n")
+            z_edit = conditon_dict.get("z")
+            c_edit = conditon_dict.get("c")
+            v_edit = conditon_dict.get("v")
+
+            n_edit.setText(flag_N)
+            z_edit.setText(flag_Z)
+            c_edit.setText(flag_C)
+            v_edit.setText(flag_V)
+            
+            pc_binary = '0x' + format(self.pc, '08x')
+            self.pc_LineEdit.setText(pc_binary)
+            self.pc += self.instruction_size
+            
+            self.current_line_index += 1
+
+    def Restart(self):
+        self.address = []
+        self.memory_current_line = []
+        self.CodeEditText.setText("")
+        self.r0_LineEdit.setText(f"{0:032b}")
+        self.r1_LineEdit.setText(f"{0:032b}")
+        self.r2_LineEdit.setText(f"{0:032b}")
+        self.r3_LineEdit.setText(f"{0:032b}")
+        self.r4_LineEdit.setText(f"{0:032b}")
+        self.r5_LineEdit.setText(f"{0:032b}")
+        self.r6_LineEdit.setText(f"{0:032b}")
+        self.r7_LineEdit.setText(f"{0:032b}")
+        self.r8_LineEdit.setText(f"{0:032b}")
+        self.r9_LineEdit.setText(f"{0:032b}")
+        self.r10_LineEdit.setText(f"{0:032b}")
+        self.r11_LineEdit.setText(f"{0:032b}")
+        self.r12_LineEdit.setText(f"{0:032b}")
+        self.sp_LineEdit.setText(f"{0:032b}")
+        self.lr_LineEdit.setText(f"{0:032b}")
+        self.pc = 0
+        self.pc_LineEdit.setText('0x' + format(0, '08x'))
+        self.current_line_index = 0
+        self.n_LineEdit.setText("0")
+        self.z_LineEdit.setText("0")
+        self.c_LineEdit.setText("0")
+        self.v_LineEdit.setText("0")
         
 
 if __name__ == "__main__":
