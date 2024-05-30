@@ -720,25 +720,28 @@ class Ui_MainWindow(object):
         self.Address_search_LineEdit.setText('0x' + format(0, '08x'))
         self.Addrr_Mem_View.scrollToTop()
     def import_file(self):
-    # mo file
-     file_path, _ = QFileDialog.getOpenFileName(None, "Import .py file", "", "Python Files (*.py)")
+    
+     file_path, _ = QFileDialog.getOpenFileName(None, "Import File", "", "Assembly Files (*.s);;Text Files (*.txt)")
      if file_path:
         try:
-            # doc file
+           
             with open(file_path, 'r') as file:
                 file_content = file.read()
             
-            
+           
             self.CodeEditText.setPlainText(file_content)
             
             
-            spec = importlib.util.spec_from_file_location("imported_module", file_path)
-            imported_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(imported_module)
-            QMessageBox.information(None, "Success", f"Successfully imported {file_path}")
-           
+            file_name = file_path.split('/')[-1]  
+            
+            
+            QMessageBox.information(None, "Success", f"Đã thêm file {file_name} thành công ")
         except Exception as e:
-            QMessageBox.critical(None, "Error", f"Failed to import {file_path}\n{e}")
+            
+            QMessageBox.critical(None, "Error", f"Mở file {file_name}\n{e} thất bại, vui lòng kiểm tra lại")
+
+
+
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
