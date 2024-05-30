@@ -354,23 +354,29 @@ class Ui_MainWindow(object):
             self.load_items()
 
     def search_items(self):
-        search_text = self.Address_search_LineEdit.text()
-        if search_text:
-            found = False
-            search_value  = int(search_text, 16)
-            while not found and self.current_index > 0:
-                for row in range(self.model.rowCount()):
-                    item = self.model.item(row, 0)
-                    if item is not None and search_text.lower() in item.text().lower():
-                        for col in range(self.model.columnCount()):
-                            self.model.item(row, col).setBackground(QtGui.QColor("yellow"))
-                        self.Addrr_Mem_View.scrollTo(self.model.indexFromItem(item))
-                        break
-                if not found:
-                    last_item_value = int(self.model.item(self.model.rowCount() - 1, 0).text(), 16)
-                    if search_value < last_item_value:
-                        break
-                    self.load_items()
+     search_text = self.Address_search_LineEdit.text()
+     if search_text:
+        found = False
+        search_value = int(search_text, 16)
+       
+        for row in range(self.model.rowCount()):
+            for col in range(self.model.columnCount()):
+                self.model.item(row, col).setBackground(QtGui.QColor("white"))
+        while not found and self.current_index > 0:
+            for row in range(self.model.rowCount()):
+                item = self.model.item(row, 0)
+                if item is not None and search_text.lower() in item.text().lower():
+                    for col in range(self.model.columnCount()):
+                        self.model.item(row, col).setBackground(QtGui.QColor("yellow"))
+                    self.Addrr_Mem_View.scrollTo(self.model.indexFromItem(item))
+                    found = True 
+                    break
+            if not found:
+                last_item_value = int(self.model.item(self.model.rowCount() - 1, 0).text(), 16)
+                if search_value < last_item_value:
+                    break
+                self.load_items()
+
                     
     def replace_items(self, listAddr, listMem):
         replacement_dict = dict(zip(listAddr, listMem))
