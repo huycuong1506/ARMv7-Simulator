@@ -1,5 +1,8 @@
+from PyQt6 import QtCore, QtGui, QtWidgets
 from decoder import Decoder
 from encoder import Encoder
+import string
+
 line_edit_dict = {
     "r0": None,
     "r1": None,
@@ -27,23 +30,18 @@ conditon_dict = {
 }
 
 DataProcessing_opcode_memory_dict = {
-    "and": '0000',
-    "eor": '0001',
-    "sub": '0010',
-    "rsb": '0011',
-    "add": '0100',
-    "adc": '0101',
-    "sbc": '0110',
-    "rsc": '0111',
-    "tst": '1000',
-    "teq": '1001',
-    "cmp": '1010',
-    "cmn": '1011',
-    "orr": '1100',
-    "mov": '1101',
-    "bic": '1110',
-    "mvn": '1111'
+    "and": '0000', "tst": '0000',
+    "bic": '0001',
+    "orr": '0010', "mov": '0010',
+    "orn": '0011', "mvn": '0011',
+    "eor": '0100', "teq": '0100',
+    "add": '1000', "cmn": '1000',
+    "adc": '1010',
+    "sbc": '1011',
+    "sub": '1101',  "cmp": '1101',
+    "rsb": '1110',
 }
+
 
 register_memory_dict = {
     "r0": '0000',
@@ -58,14 +56,17 @@ register_memory_dict = {
     "r9": '1001',
     "r10": '1010',
     "r11": '1011',
-    "r12": '1100'
+    "r12": '1100',
+    "sp": '1101',
+    "lr": '1110',
+    "pc": '1111'
 }
 
 condition_memory_dict = {
     "eq": '0000',
     "ne": '0001',
-    "cs" or "hs": '0010',
-    "cc" or "lo": '0011',
+    "cs": '0010', "hs": '0010',
+    "cc": '0010', "lo": '0011',
     "mi": '0100',
     "pl": '0101',
     "vs": '0110',
@@ -86,6 +87,59 @@ shift_memory_dict = {
     "ror": '11',
     "rrx": '11'
 }
+
+def find_imm8_and_rot(value):
+    i = "0"
+    imm3 = "000"
+    imm8 = "00000000"
+    if value == 0:
+        return i, imm3, imm8
+    for rot in range(16):
+        rotated_value = (value >> (2 * rot)) | (value << (32 - (2 * rot)))
+        rotated_value &= 0xFFFFFFFF
+        if rotated_value <= 0xFF:
+            imm8 = format(rotated_value, "08b")
+            rot = format(rot, "04b")
+            i = rot[0]
+            imm3 = rot[1:]
+            return i, imm3, imm8
+    return i, imm3, imm8
+
+def twos_complement_to_signed(hex_str):
+    decimal_value = int(hex_str, 16)
+    if decimal_value & (1 << (32 - 1)):
+        decimal_value -= 1 << 32
+    return decimal_value
+
+def is_special_or_digit(word):
+    if not word:
+        return False
+    first_char = word[0]
+    if first_char.isdigit():
+        return True
+    special_characters = string.punctuation
+    if first_char in special_characters:
+        return True
+    return False
+
+def parse_labels(input_lines):
+    labels = {}
+    current_label = None
+    remaining_lines = []
+    input_lines = [item for item in input_lines if item not in ["", None]]
+    for line in input_lines:
+        stripped_line = line.strip()
+        result = is_special_or_digit(stripped_line)
+        
+        if stripped_line.endswith(':') and not result:
+            current_label = stripped_line[:-1]
+            labels[current_label] = []
+        elif current_label is not None:
+            labels[current_label].append(stripped_line)
+            remaining_lines.append(stripped_line)
+        else:
+            remaining_lines.append(stripped_line)
+    return labels, remaining_lines
 
 def check_condition(condition):
     n_edit = conditon_dict.get("n")
@@ -171,11 +225,11 @@ def check_condition(condition):
     if (condition.lower() == ""):
         return True
 
-def l_shift_32_c(a, shift_val):
+def l_shift_32_c(a, shift_val, line):
     result = []
-    assert isinstance(a, str) and isinstance(shift_val, int)
-    assert len(a) == 32
-    assert 0 <= shift_val <= 32
+    if not isinstance(a, str) or not isinstance(shift_val, int) or len(a) != 32 or (not (0 <= shift_val <= 32)):
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     carry = None
     if shift_val == 0:
         carry = '0'
@@ -186,11 +240,11 @@ def l_shift_32_c(a, shift_val):
     result.append(a)
     return result, carry
 
-def r_shift_32_c(a, shift_val):
+def r_shift_32_c(a, shift_val, line):
     result = []
-    assert isinstance(a, str) and isinstance(shift_val, int)
-    assert len(a) == 32
-    assert 0 <= shift_val <= 32
+    if not isinstance(a, str) or not isinstance(shift_val, int) or len(a) != 32 or (not (0 <= shift_val <= 32)):
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     carry = None
     if shift_val == 0:
         carry = '0'
@@ -201,11 +255,11 @@ def r_shift_32_c(a, shift_val):
     result.append(a)
     return result, carry
 
-def asr_shift_32_c(a, shift_val):
+def asr_shift_32_c(a, shift_val, line):
     result = []
-    assert isinstance(a, str) and isinstance(shift_val, int)
-    assert len(a) == 32
-    assert 0 <= shift_val <= 32
+    if not isinstance(a, str) or not isinstance(shift_val, int) or len(a) != 32 or (not (0 <= shift_val <= 32)):
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     sign_bit = a[0]
     carry = None
     if shift_val == 0:
@@ -217,11 +271,11 @@ def asr_shift_32_c(a, shift_val):
     result.append(a)
     return result, carry
 
-def ror_shift_32_c(a, shift_val):
+def ror_shift_32_c(a, shift_val, line):
     result = []
-    assert isinstance(a, str) and isinstance(shift_val, int)
-    assert len(a) == 32
-    assert 0 <= shift_val <= 32
+    if not isinstance(a, str) or not isinstance(shift_val, int) or len(a) != 32 or (not (0 <= shift_val <= 32)):
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     if shift_val == 0:
         carry = '0'
     else:
@@ -232,20 +286,24 @@ def ror_shift_32_c(a, shift_val):
     return result, carry
 
 
-def rrx_shift_32_c(a, carry_in):
+def rrx_shift_32_c(a, carry_in, line):
     result = []
-    assert isinstance(a, str) and len(a) == 32
-    assert isinstance(carry_in, str) and len(carry_in) == 1
+    if not isinstance(a, str) or len(a) != 32 or not isinstance(carry_in, str) or len(carry_in) != 1:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     carry_out = a[-1]
     shifted_str = carry_in + a[:-1]
-    assert len(shifted_str) == 32
+    if len(shifted_str) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a shift operation --" + line)
+        return None, None
     result.append(shifted_str)
     return result, carry_out
 
-def and_32(str1, str2):
+def and_32(str1, str2, line):
     result = []
-    assert isinstance(str1, str) and isinstance(str2, str)
-    assert len(str1) == 32 and len(str2) == 32
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a logic operation --" + line)
+        return None
     num1 = int(str1, 2)
     num2 = int(str2, 2)
     result_int = num1 & num2
@@ -255,10 +313,11 @@ def and_32(str1, str2):
     result.append(result_str)
     return result
 
-def or_32(str1, str2):
+def or_32(str1, str2, line):
     result = []
-    assert isinstance(str1, str) and isinstance(str2, str)
-    assert len(str1) == 32 and len(str2) == 32
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a logic operation --" + line)
+        return None
     num1 = int(str1, 2)  
     num2 = int(str2, 2)  
     result_int = num1 | num2  
@@ -268,10 +327,11 @@ def or_32(str1, str2):
     result.append(result_str)
     return result
 
-def xor_32(str1, str2):
+def xor_32(str1, str2, line):
     result = []
-    assert isinstance(str1, str) and isinstance(str2, str)
-    assert len(str1) == 32 and len(str2) == 32
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for a logic operation --" + line)
+        return None
     num1 = int(str1, 2)  
     num2 = int(str2, 2)  
     result_int = num1 ^ num2
@@ -281,13 +341,16 @@ def xor_32(str1, str2):
     result.append(result_str)
     return result
 
-def cmp_32(temporary):
+def sub_32(temporary, line): 
     result = []
-    assert len(temporary) == 2
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
     str1 = temporary[0]
     str2 = temporary[1]
-    assert isinstance(str1, str) and isinstance(str2, str)
-    assert len(str1) == 32 and len(str2) == 32
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
     num1 = int(str1, 2)  
     num2 = int(str2, 2)  
     result_int = num1 - num2
@@ -307,13 +370,16 @@ def detect_overflow_sub(a, b, res):
         return '1'
     return '0'
 
-def cmn_32(temporary):
+def add_32(temporary, line):
     result = []
-    assert len(temporary) == 2
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
     str1 = temporary[0]
     str2 = temporary[1]
-    assert isinstance(str1, str) and isinstance(str2, str)
-    assert len(str1) == 32 and len(str2) == 32
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
     num1 = int(str1, 2)  
     num2 = int(str2, 2)  
     result_int = num1 + num2
@@ -333,9 +399,128 @@ def detect_overflow_add(a, b, res):
         return '1'
     return '0'
 
+def mul_32(temporary, line):
+    result = []
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    str1 = temporary[0]
+    str2 = temporary[1]
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    num1 = int(str1, 2)  
+    num2 = int(str2, 2)  
+    result_int = num1 * num2
+    result_str = f"{result_int & ((1 << 32) - 1):032b}"
+    result_str = Decoder(result_str)
+    result_str = Encoder(result_str)
+    result.append(result_str)
+    return result
+
+def mul_64_unsigned(temporary, line):
+    result = []
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    str1 = temporary[0]
+    str2 = temporary[1]
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    num1 = int(str1, 2)
+    num2 = int(str2, 2)
+    result_int = num1 * num2
+    lower_32 = result_int & ((1 << 32) - 1)
+    upper_32 = (result_int >> 32) & ((1 << 32) - 1)
+    lower_32_str = f"{lower_32:032b}"
+    upper_32_str = f"{upper_32:032b}"
+    result.append(lower_32_str)
+    result.append(upper_32_str)
+    return result
+
+def mul_64_signed(temporary, line):
+    result = []
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    str1 = temporary[0]
+    str2 = temporary[1]
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    num1 = int(str1, 2)
+    if num1 >= 2**31:
+        num1 -= 2**32
+    num2 = int(str2, 2)
+    if num2 >= 2**31:
+        num2 -= 2**32
+    result_int = num1 * num2
+    lower_32 = result_int & ((1 << 32) - 1)
+    upper_32 = (result_int >> 32) & ((1 << 32) - 1)
+    if lower_32 >= 2**31:
+        lower_32 -= 2**32
+    if upper_32 >= 2**31:
+        upper_32 -= 2**32
+    lower_32_str = f"{lower_32 & ((1 << 32) - 1):032b}"
+    upper_32_str = f"{upper_32 & ((1 << 32) - 1):032b}"
+    result.append(lower_32_str)
+    result.append(upper_32_str)
+    return result
+
+def divide_32_unsigned(temporary, line):
+    print(temporary)
+    result = []
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    str1 = temporary[0]
+    str2 = temporary[1]
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    num1 = int(str1, 2)
+    num2 = int(str2, 2)
+    if num2 == 0:
+        result_str = Encoder(0)
+        result.append(result_str)
+        return result
+    result_int = num1 // num2
+    result_str = f"{result_int:032b}"
+    result.append(result_str)
+    return result
+
+def divide_32_signed(temporary, line):
+    result = []
+    print(temporary)
+    if len(temporary) != 2:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    str1 = temporary[0]
+    str2 = temporary[1]
+    if not isinstance(str1, str) or not isinstance(str2, str) or len(str1) != 32 or len(str2) != 32:
+        QtWidgets.QMessageBox.critical(None, "Lỗi", "undefined input for an arithmetic operation --" + line)
+        return None
+    num1 = int(str1, 2)
+    if num1 >= 2**31:
+        num1 -= 2**32
+    num2 = int(str2, 2)
+    if num2 >= 2**31:
+        num2 -= 2**32
+    if num2 == 0:
+        result_str = Encoder(0)
+        result.append(result_str)
+        return result
+    result_int = num1 // num2
+    if result_int < 0:
+        result_int += 2**32
+    result_str = f"{result_int & ((1 << 32) - 1):032b}"
+    result.append(result_str)
+    return result
+
 def complement(binary_str):
-    assert isinstance(binary_str, str)
-    assert all(bit in '01' for bit in binary_str)
+    if not isinstance(binary_str, str) or not all(bit in '01' for bit in binary_str):
+        raise ValueError("undefined input for a complement")
     complement_str = ''.join('1' if bit == '0' else '0' for bit in binary_str)
     return complement_str
 
@@ -358,36 +543,495 @@ def process_binary(num):
     binary_str = Encoder(num)
     if len(binary_str) != 32:
         return None
-    
     positions = find_bit_positions(binary_str)
     num_ones = len(positions)
-    
     if int(binary_str, 2) > 255 and (31 in positions or 30 in positions):
         return None
-    
     if num_ones == 0:
         rotation = 0
     elif num_ones == 1:
         rotation = determine_rotation_for_single_bit(positions)
     elif num_ones > 1:
         rotation = determine_rotation_for_multiple_bits(positions)
-        
     if rotation == None:
         return None
-
     rotated_str = binary_str[-rotation:] + binary_str[:-rotation]
     last_8_bits = rotated_str[-8:]
     rotation_bits = format(15 - (rotation // 2), '04b')
-    
     if int(binary_str, 2) < 256:
-        result = "0000" + last_8_bits
+        result = "0000" + binary_str[-8:]
         return result
-    
     result = rotation_bits + last_8_bits
     return result
 
+def ascii_memory(string, group_size=4):
+    hex_codes = [format(ord(c), 'x') for c in string]
+    while len(hex_codes) % group_size != 0:
+        hex_codes.append('00')
+    ascii_memory = [''.join(hex_codes[i:i + group_size][::-1]) for i in range(0, len(hex_codes), group_size)]
+    return ascii_memory
 
+def split_hex(hex_str):
+    bytes_list = [f"{hex_str[i:i+2]}" for i in range(0, len(hex_str), 2)]
+    bytes_list.reverse()
+    memory = " ".join(bytes_list)
+    return memory
 
+def combine_hex(memory):
+    bytes_list = memory.split()
+    bytes_list.reverse()
+    hex_str = "".join(byte for byte in bytes_list)
+    return hex_str
 
-    
-    
+def replace_memory(model, listAddr, listMem):
+    replacement_dict = dict(zip(listAddr, listMem))
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        for address in listAddr:
+            text = QtGui.QStandardItem(replacement_dict[address])
+            text.setFlags(text.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+            if int(address, 16) == int(addr, 16):
+                model.setItem(row, 1, text)
+            if addr_next and int(address, 16) > int(addr, 16) and int(address, 16) < int(addr_next, 16):
+                num = int((int(address, 16) - int(addr, 16)) / 4) + 1
+                model.setItem(row, num, text)
+            if not addr_next and int(address, 16) > int(addr, 16):
+                num = int((int(address, 16) - int(addr, 16)) / 4) + 1
+                model.setItem(row, num, text)
+                
+def replace_memory_byte(model_byte, listAddr, listMem):
+    for i in range(len(listMem)):
+        listMem[i] = split_hex(listMem[i])
+    replacement_dict = dict(zip(listAddr, listMem))
+    max_row = model_byte.rowCount() - 1
+    for row in range(1, model_byte.rowCount()):
+        item_addr = model_byte.item(row, 0)
+        if row != max_row:
+            item_addr_next = model_byte.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        for address in listAddr:
+            text = QtGui.QStandardItem(replacement_dict[address])
+            if int(address, 16) == int(addr, 16):
+                model_byte.setItem(row, 1, text)
+            if addr_next and int(address, 16) > int(addr, 16) and int(address, 16) < int(addr_next, 16):
+                num = int((int(address, 16) - int(addr, 16)) / 4) + 1
+                model_byte.setItem(row, num, text)
+            if not addr_next and int(address, 16) > int(addr, 16):
+                num = int((int(address, 16) - int(addr, 16)) / 4) + 1
+                model_byte.setItem(row, num, text)
+    for i in range(len(listMem)):
+        listMem[i] = combine_hex(listMem[i])
+
+def find_one_memory(model, addr_input):
+    mem = "00"
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            mem = model.item(row, 1).text()
+            found = True
+            return mem
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return mem
+        
+def find_one_memory_in_byte(model_byte, addr_input):
+    mem_out = "00"
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    for row in range(1, model_byte.rowCount()):
+        item_addr = model_byte.item(row, 0)
+        if item_addr:
+            addr = item_addr.text()
+        if search_value - twos_complement_to_signed(addr) == 0:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[0]
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 1:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[1]
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 2:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[2]
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 3:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[3]
+            found = True
+            return mem_out
+    if not found:
+        last_item_value = twos_complement_to_signed(model_byte.item(model_byte.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return mem_out
+        
+def find_one_memory_in_halfword(model_byte, addr_input):
+    mem_out = "0000"
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    for row in range(1, model_byte.rowCount()):
+        item_addr = model_byte.item(row, 0)
+        if item_addr:
+            addr = item_addr.text()
+        if search_value - twos_complement_to_signed(addr) == 0:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[1] + mems[0]
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 1:
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 2:
+            mem = model_byte.item(row, 1).text()
+            mems = mem.split()
+            mem_out = mems[3] + mems[2]
+            found = True
+            return mem_out
+        elif search_value - twos_complement_to_signed(addr) == 3:
+            found = True
+            return mem_out
+    if not found:
+        last_item_value = twos_complement_to_signed(model_byte.item(model_byte.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return mem_out
+        
+def replace_one_memory(model, addr_input, mem_input):
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model.item(row, 1).setText(mem_input)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int(((search_value - twos_complement_to_signed(addr)) / 4) + 1)
+            model.item(row, num).setText(mem_input)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int(((search_value - twos_complement_to_signed(addr, 16)) / 4) + 1)
+            model.item(row, num).setText(mem_input)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
+        
+def replace_one_memory_byte(model, addr_input, mem_input):
+    mem_input = split_hex(mem_input)
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model.item(row, 1).setText(mem_input)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model.item(row, num).setText(mem_input)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model.item(row, num).setText(mem_input)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
+        
+def replace_one_memory_in_byte(model, addr_input, mem_input):
+    mem_input = split_hex(mem_input)
+    mem_input = mem_input.split()
+    mem_input_byte = mem_input[0]
+    num_addr = int(addr_input, 16)
+    surplus = num_addr % 4
+    num_addr = num_addr - surplus
+    addr_input = format(num_addr, "08x")
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, 1).setText(model_text)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
+        
+def replace_one_memory_byte_in_byte(model, addr_input, mem_input):
+    mem_input = split_hex(mem_input)
+    mem_input = mem_input.split()
+    mem_input_byte = mem_input[0]
+    num_addr = int(addr_input, 16)
+    surplus = num_addr % 4
+    num_addr = num_addr - surplus
+    addr_input = format(num_addr, "08x")
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, 1).setText(model_text)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            model_text_byte[surplus] = mem_input_byte
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
+        
+def replace_one_memory_in_halfword(model, addr_input, mem_input):
+    mem_input = split_hex(mem_input)
+    mem_input = mem_input.split()
+    num_addr = int(addr_input, 16)
+    surplus = num_addr % 4
+    num_addr = num_addr - surplus
+    addr_input = format(num_addr, "08x")
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, 1).setText(model_text)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = split_hex(model_text)
+            model_text_byte = model_text_byte.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
+        
+def replace_one_memory_halfword_in_byte(model, addr_input, mem_input):
+    mem_input = split_hex(mem_input)
+    mem_input = mem_input.split()
+    num_addr = int(addr_input, 16)
+    surplus = num_addr % 4
+    num_addr = num_addr - surplus
+    addr_input = format(num_addr, "08x")
+    found = False
+    search_value  = twos_complement_to_signed(addr_input)
+    max_row = model.rowCount() - 1
+    for row in range(1, model.rowCount()):
+        item_addr = model.item(row, 0)
+        if row != max_row:
+            item_addr_next = model.item(row + 1, 0)
+            addr_next = item_addr_next.text()
+        if item_addr:
+            addr = item_addr.text()
+        if search_value == twos_complement_to_signed(addr):
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, 1).setText(model_text)
+            found = True
+            return
+        if addr_next and search_value > twos_complement_to_signed(addr) and search_value < twos_complement_to_signed(addr_next):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+        if not addr_next and search_value > twos_complement_to_signed(addr):
+            num = int((search_value - twos_complement_to_signed(addr)) / 4) + 1
+            model_text = model.item(row, 1).text()
+            model_text_byte = model_text.split()
+            if surplus == 0 or surplus == 2:
+                model_text_byte[0] = mem_input[0]
+                model_text_byte[1] = mem_input[1]
+            else:
+                model_text_byte[0] = "00"
+                model_text_byte[1] = "00"
+            model_text_byte.reverse()
+            model_text_byte = "".join(byte for byte in model_text_byte)
+            model_text = combine_hex(model_text_byte)
+            model_text = split_hex(model_text)
+            model.item(row, num).setText(model_text)
+            found = True
+            return
+    if not found:
+        last_item_value = twos_complement_to_signed(model.item(model.rowCount() - 1, 0).text())
+        if search_value < last_item_value:
+            return
